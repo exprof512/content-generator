@@ -44,8 +44,14 @@ func (c *Client) Generate(prompt string) (string, error) {
 		},
 	}
 
-	jsonBody, _ := json.Marshal(reqBody)
-	req, _ := http.NewRequest("POST", c.baseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return "", fmt.Errorf("failed to marshal request body: %w", err)
+	}
+	req, err := http.NewRequest("POST", c.baseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
 	req.Header.Set("Content-Type", "application/json")
 
@@ -56,7 +62,12 @@ func (c *Client) Generate(prompt string) (string, error) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, _ := io.ReadAll(resp.Body)
+		body, readErr := io.ReadAll(resp.Body) // <--- Обрабатываем ошибку чтения
+		if readErr != nil {
+			// Если не смогли прочитать тело ответа, возвращаем ошибку чтения
+			return "", fmt.Errorf("API error %d occurred, but failed to read response body: %w", resp.StatusCode, readErr)
+		}
+		// Если тело прочитали, возвращаем ошибку с телом
 		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 

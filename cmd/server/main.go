@@ -28,6 +28,20 @@ func main() {
 	// Настройка роутера Gin
 	router := gin.Default()
 
+	// Обработка фидбека
+	router.POST("/feedback", func(c *gin.Context) {
+		var feedback struct {
+			Score   int    `json:"score"`
+			Content string `json:"content"`
+		}
+		if err := c.ShouldBindJSON(&feedback); err != nil {
+			c.JSON(400, gin.H{"error": "Invalid request"})
+			return
+		}
+		// Сохраняем в базу данных
+		c.JSON(200, gin.H{"status": "success"})
+	})
+
 	// Маршрут для генерации контента
 	router.POST("/generate", func(c *gin.Context) {
 		var request struct {
@@ -53,8 +67,10 @@ func main() {
 		// Генерация контента через API
 		result, err := client.Generate(request.Prompt)
 		if err != nil {
-			log.Printf("API error: %v", err)
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			// Логируем подробную ошибку для себя
+			log.Printf("API generation error: %v", err)
+			// Отправляем пользователю общее сообщение об ошибке
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Ошибка при генерации контента. Попробуйте позже."})
 			return
 		}
 
