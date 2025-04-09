@@ -54,6 +54,18 @@ func main() {
 			return
 		}
 
+		if os.Getenv("MOCK_MODE") == "true" {
+			log.Printf("MOCK RESPONSE for: %s", request.Prompt)
+
+			mockContent := fmt.Sprintf(`[Моковые данные] Пример контента для: "%s". 
+				Lorem ipsum dolor sit amet, consectetur adipiscing elit. 
+				Sed do eiusmod tempor incididunt ut labore et dolore magna aliqua.`, request.Prompt)
+
+			cacheInstance.Set(request.Prompt, mockContent, cache.DefaultExpiration)
+			c.JSON(http.StatusOK, gin.H{"content": mockContent})
+			return
+		}
+
 		// Логирование запроса
 		log.Printf("Request received: %s", request.Prompt)
 
