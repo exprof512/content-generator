@@ -7,6 +7,8 @@ import (
 	"io"
 	"net/http"
 	"time"
+
+	"github.com/exprof512/content-generator/internal/logger"
 )
 
 type Client struct {
@@ -19,7 +21,7 @@ func NewClient(apiKey string) *Client {
 	return &Client{
 		baseURL:    "https://api.deepseek.com/v1",
 		apiKey:     apiKey,
-		httpClient: &http.Client{Timeout: 30 * time.Second},
+		httpClient: &http.Client{Timeout: 120 * time.Second},
 	}
 }
 
@@ -46,10 +48,13 @@ func (c *Client) Generate(prompt string) (string, error) {
 
 	jsonBody, err := json.Marshal(reqBody)
 	if err != nil {
+		logger.Log.WithError(err).Error("Ошибка сериализации тела запроса")
 		return "", fmt.Errorf("failed to marshal request body: %w", err)
 	}
+
 	req, err := http.NewRequest("POST", c.baseURL+"/chat/completions", bytes.NewBuffer(jsonBody))
 	if err != nil {
+		logger.Log.WithError(err).Error("Ошибка создания HTTP-запроса")
 		return "", fmt.Errorf("failed to create request: %w", err)
 	}
 	req.Header.Set("Authorization", "Bearer "+c.apiKey)
@@ -57,17 +62,23 @@ func (c *Client) Generate(prompt string) (string, error) {
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
+		logger.Log.WithError(err).Error("Ошибка отправки запроса к DeepSeek API")
 		return "", fmt.Errorf("API request failed: %w", err)
 	}
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
-		body, readErr := io.ReadAll(resp.Body) // <--- Обрабатываем ошибку чтения
+		body, readErr := io.ReadAll(resp.Body)
 		if readErr != nil {
-			// Если не смогли прочитать тело ответа, возвращаем ошибку чтения
+			logger.Log.WithFields(map[string]interface{}{
+				"status": resp.StatusCode,
+			}).WithError(readErr).Error("Ошибка чтения тела ответа от DeepSeek API")
 			return "", fmt.Errorf("API error %d occurred, but failed to read response body: %w", resp.StatusCode, readErr)
 		}
-		// Если тело прочитали, возвращаем ошибку с телом
+		logger.Log.WithFields(map[string]interface{}{
+			"status": resp.StatusCode,
+			"body":   string(body),
+		}).Error("DeepSeek API вернул ошибку")
 		return "", fmt.Errorf("API error %d: %s", resp.StatusCode, string(body))
 	}
 
@@ -80,12 +91,15 @@ func (c *Client) Generate(prompt string) (string, error) {
 	}
 
 	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
+		logger.Log.WithError(err).Error("Ошибка декодирования ответа от DeepSeek")
 		return "", fmt.Errorf("decode error: %w", err)
 	}
 
 	if len(response.Choices) == 0 {
+		logger.Log.Warn("Ответ DeepSeek пуст — нет Choices")
 		return "", fmt.Errorf("empty response")
 	}
 
+	logger.Log.WithField("prompt", prompt).Info("Успешная генерация через DeepSeek")
 	return response.Choices[0].Message.Content, nil
 }
